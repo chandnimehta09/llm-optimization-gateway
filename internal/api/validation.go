@@ -3,7 +3,7 @@ package api
 import (
 	"fmt"
 
-	"github.com/llm-optimization-gateway/internal/api/models"
+	"github.com/example/llm-optimization-gateway/internal/api/models"
 )
 
 // ValidationError represents a request validation error.

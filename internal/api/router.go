@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/llm-optimization-gateway/internal/api/handlers"
+	"github.com/example/llm-optimization-gateway/internal/api/handlers"
 )
 
 // NewRouter creates and configures the API router with all routes.

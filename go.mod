@@ -1,4 +1,4 @@
-module github.com/llm-optimization-gateway
+module github.com/example/llm-optimization-gateway
 
 go 1.21
 
