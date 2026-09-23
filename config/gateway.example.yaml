@@ -1,0 +1,38 @@
+# LLM Optimization Gateway Configuration
+# Copy this file to gateway.yaml and adjust for your environment.
+
+server:
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+  shutdown_timeout: 10s
+
+cache:
+  enabled: false
+  redis_url: "localhost:6379"
+  default_ttl: 5m
+
+providers:
+  - name: openai
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    timeout: 30s
+  # - name: anthropic
+  #   api_key: "${ANTHROPIC_API_KEY}"
+  #   base_url: "https://api.anthropic.com/v1"
+  #   timeout: 30s
+
+telemetry:
+  enabled: false
+  service_name: "llm-optimization-gateway"
+  metrics_port: 9090
+  trace_endpoint: "localhost:4317"
+
+logging:
+  level: info
+  format: json
+  output: stdout
+
+gateway:
+  request_id_header: "X-Request-ID"
+  max_request_size: 1048576  # 1 MB
