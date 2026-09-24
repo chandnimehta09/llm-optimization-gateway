@@ -1,6 +1,9 @@
 package cache
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // CacheMissError is returned when a key is not found in the cache.
 type CacheMissError struct {
@@ -56,4 +59,36 @@ func IsCacheExpired(err error) bool {
 func IsCacheCorrupted(err error) bool {
 	_, ok := err.(*CacheCorruptedError)
 	return ok
+}
+
+type CacheFailureError struct {
+	Operation string
+	Cause     error
+}
+
+func (e *CacheFailureError) Error() string {
+	return fmt.Sprintf("cache failure during %s: %v", e.Operation, e.Cause)
+}
+
+func (e *CacheFailureError) Unwrap() error { return e.Cause }
+
+func IsCacheFailure(err error) bool {
+	var cfe *CacheFailureError
+	return errors.As(err, &cfe)
+}
+
+func ClassifyCacheError(err error) (reason BypassReason, transient bool) {
+	if err == nil {
+		return "", false
+	}
+	if IsCacheMiss(err) || IsCacheExpired(err) {
+		return "", false
+	}
+	if IsCacheCorrupted(err) {
+		return BypassCacheError, false
+	}
+	if IsCacheFailure(err) {
+		return BypassCacheError, true
+	}
+	return BypassCacheError, true
 }
