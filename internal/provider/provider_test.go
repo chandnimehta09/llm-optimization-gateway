@@ -37,9 +37,9 @@ func (m *mockProvider) CompleteStream(_ context.Context, _ *CompletionRequest) (
 	return m.streamCh, nil
 }
 
-func (m *mockProvider) Models() []string          { return m.models }
+func (m *mockProvider) Models() []string                 { return m.models }
 func (m *mockProvider) IsHealthy(_ context.Context) bool { return m.healthy }
-func (m *mockProvider) APIFormat() APIFormat       { return m.apiFormat }
+func (m *mockProvider) APIFormat() APIFormat             { return m.apiFormat }
 
 // =============================================================================
 // Provider Interface Tests
