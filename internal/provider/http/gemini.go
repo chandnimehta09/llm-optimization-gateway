@@ -432,7 +432,7 @@ func (p *geminiResponseParser) ParseError(resp *http.Response, providerName stri
 
 	switch resp.StatusCode {
 	case http.StatusTooManyRequests:
-		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+		retryAfter := parseGeminiRetryAfter(resp.Header.Get("Retry-After"))
 		return &provider.RateLimitError{
 			ProviderError: provider.ProviderError{
 				Provider: providerName,
@@ -476,21 +476,6 @@ func (p *geminiResponseParser) ParseError(resp *http.Response, providerName stri
 			Message:  errMsg,
 		}
 	}
-}
-
-// geminiStreamArrayResponse handles the streaming array format from Gemini.
-type geminiStreamArrayResponse struct {
-	Items []geminiCompletionResponse
-}
-
-// parseGeminiStreamArray attempts to parse a JSON array of Gemini responses
-// used in some streaming modes.
-func parseGeminiStreamArray(data string) ([]geminiCompletionResponse, error) {
-	var items []geminiCompletionResponse
-	if err := json.Unmarshal([]byte(data), &items); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 // parseGeminiRetryAfter parses Gemini-specific retry-after information.
