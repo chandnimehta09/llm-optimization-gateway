@@ -218,9 +218,9 @@ func TestTelemetry_Snapshot(t *testing.T) {
 
 func TestTelemetrySnapshot_HitRate(t *testing.T) {
 	tests := []struct {
-		name    string
-		snap    TelemetrySnapshot
-		want    float64
+		name string
+		snap TelemetrySnapshot
+		want float64
 	}{
 		{"no requests", TelemetrySnapshot{}, 0},
 		{"all hits", TelemetrySnapshot{TotalRequests: 10, CacheHitRequests: 10}, 1.0},

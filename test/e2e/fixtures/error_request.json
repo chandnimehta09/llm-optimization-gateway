@@ -1,0 +1,6 @@
+{
+  "model": "invalid-model-xxx",
+  "messages": [],
+  "temperature": 0.7,
+  "max_tokens": 100
+}
