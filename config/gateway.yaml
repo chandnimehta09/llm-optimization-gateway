@@ -1,0 +1,31 @@
+# LLM Optimization Gateway Configuration
+# Environment variable overrides use the GATEWAY_ prefix.
+# For example, GATEWAY_SERVER_PORT overrides server.port.
+
+server:
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+  shutdown_timeout: 10s
+
+cache:
+  enabled: false
+  redis_url: "localhost:6379"
+  default_ttl: 5m
+
+providers: []
+
+telemetry:
+  enabled: false
+  service_name: "llm-optimization-gateway"
+  metrics_port: 9090
+  trace_endpoint: "localhost:4317"
+
+logging:
+  level: info
+  format: json
+  output: stdout
+
+gateway:
+  request_id_header: "X-Request-ID"
+  max_request_size: 1048576  # 1 MB
