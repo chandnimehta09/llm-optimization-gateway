@@ -1,6 +1,6 @@
 module github.com/llm-optimization-gateway
 
-go 1.21
+go 1.26.0
 
 require (
 	github.com/google/uuid v1.6.0
@@ -9,6 +9,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.28.0
 	go.opentelemetry.io/otel/sdk/metric v1.28.0
 	go.opentelemetry.io/otel/trace v1.28.0
+	golang.org/x/text v0.42.0
 )
 
 require (
