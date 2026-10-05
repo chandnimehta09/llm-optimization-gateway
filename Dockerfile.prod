@@ -1,0 +1,78 @@
+# Production Dockerfile for LLM Optimization Gateway
+# Multi-stage build with minimal attack surface
+
+# ============================================================
+# Stage 1: Build
+# ============================================================
+FROM golang:1.26-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache ca-certificates git tzdata
+
+# Create non-root user for the final image
+RUN addgroup -g 10001 -S appgroup && \
+    adduser -u 10001 -S appuser -G appgroup -h /home/appuser -s /sbin/nologin
+
+WORKDIR /build
+
+# Cache dependency downloads
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+
+# Copy source code
+COPY . .
+
+# Build with optimizations
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-s -w -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev) -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    -trimpath \
+    -o /build/gateway \
+    ./cmd/gateway/
+
+# ============================================================
+# Stage 2: Production
+# ============================================================
+FROM alpine:3.20 AS production
+
+# Install runtime dependencies only
+RUN apk add --no-cache \
+    ca-certificates \
+    curl \
+    tini \
+    && rm -rf /var/cache/apk/*
+
+# Copy user/group from builder
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /etc/group /etc/group
+
+# Copy timezone data
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+
+# Copy the binary
+COPY --from=builder /build/gateway /gateway
+
+# Copy scripts
+COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
+COPY scripts/healthcheck.sh /healthcheck.sh
+
+# Ensure scripts are executable
+RUN chmod +x /docker-entrypoint.sh /healthcheck.sh
+
+# Create tmp directory for the app
+RUN mkdir -p /tmp && chown appuser:appgroup /tmp
+
+# Use non-root user
+USER appuser:appgroup
+
+# Expose ports
+EXPOSE 8080 9090
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["/healthcheck.sh"]
+
+# Use tini as init process for proper signal handling
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Run the gateway
+CMD ["/docker-entrypoint.sh"]

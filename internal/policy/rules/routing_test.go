@@ -391,8 +391,8 @@ func TestRoutingPolicy_CostOptimizedStrategy(t *testing.T) {
 			},
 		},
 		DefaultStrategy: RoutingStrategyCostOptimized,
-		DefaultProvider:  "expensive",
-		DefaultModel:     "test-model",
+		DefaultProvider: "expensive",
+		DefaultModel:    "test-model",
 	}
 
 	rp := NewRoutingPolicy(routingConfig, "1.0.0")
@@ -448,8 +448,8 @@ func TestRoutingPolicy_LatencyOptimizedStrategy(t *testing.T) {
 			},
 		},
 		DefaultStrategy: RoutingStrategyLatencyOptimized,
-		DefaultProvider:  "prov-a",
-		DefaultModel:     "test-model",
+		DefaultProvider: "prov-a",
+		DefaultModel:    "test-model",
 	}
 
 	rp := NewRoutingPolicy(routingConfig, "1.0.0")
@@ -542,8 +542,8 @@ func TestRoutingPolicy_StrategyFromMetadata(t *testing.T) {
 			},
 		},
 		DefaultStrategy: RoutingStrategyDirect,
-		DefaultProvider:  "expensive",
-		DefaultModel:     "test-model",
+		DefaultProvider: "expensive",
+		DefaultModel:    "test-model",
 	}
 
 	rp := NewRoutingPolicy(routingConfig, "1.0.0")
@@ -841,8 +841,8 @@ func TestRoutingPolicy_Integration_MultipleProviders(t *testing.T) {
 			},
 		},
 		DefaultStrategy: RoutingStrategyDirect,
-		DefaultProvider:  "openai",
-		DefaultModel:     "gpt-3.5-turbo",
+		DefaultProvider: "openai",
+		DefaultModel:    "gpt-3.5-turbo",
 	}
 
 	rp := NewRoutingPolicy(routingConfig, "1.0.0")

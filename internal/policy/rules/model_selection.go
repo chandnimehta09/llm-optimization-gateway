@@ -562,7 +562,7 @@ func NewDefaultRoutingConfig() *RoutingConfig {
 			},
 		},
 		DefaultStrategy: RoutingStrategyDirect,
-		DefaultProvider:  "openai",
-		DefaultModel:     "gpt-3.5-turbo",
+		DefaultProvider: "openai",
+		DefaultModel:    "gpt-3.5-turbo",
 	}
 }

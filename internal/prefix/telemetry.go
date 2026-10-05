@@ -24,15 +24,15 @@ type Telemetry struct {
 	totalCachedTokens atomic.Int64
 
 	// OTel instruments.
-	prefixTokensCounter  metric.Int64Counter
-	cachedTokensCounter  metric.Int64Counter
-	cacheHitCounter      metric.Int64Counter
-	cacheMissCounter     metric.Int64Counter
-	requestDuration      metric.Float64Histogram
-	latencySavings       metric.Float64Histogram
-	prefixCacheHitRate   metric.Float64Histogram
-	requestsTotal        metric.Int64Counter
-	prefixLengthHist     metric.Float64Histogram
+	prefixTokensCounter metric.Int64Counter
+	cachedTokensCounter metric.Int64Counter
+	cacheHitCounter     metric.Int64Counter
+	cacheMissCounter    metric.Int64Counter
+	requestDuration     metric.Float64Histogram
+	latencySavings      metric.Float64Histogram
+	prefixCacheHitRate  metric.Float64Histogram
+	requestsTotal       metric.Int64Counter
+	prefixLengthHist    metric.Float64Histogram
 
 	// meterProvider is kept for testing.
 	meterProvider metric.MeterProvider

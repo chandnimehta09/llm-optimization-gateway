@@ -1,0 +1,64 @@
+version: "3.8"
+
+# Docker Compose configuration for e2e testing.
+# This sets up the gateway with mock providers and Redis for integration testing.
+
+services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.prod
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    environment:
+      - GATEWAY_PORT=8080
+      - METRICS_PORT=9090
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=debug
+      - CACHE_ENABLED=true
+      - CACHE_TTL=300s
+      - DEDUP_ENABLED=true
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/healthcheck.sh"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    volumes:
+      - redis-test-data:/data
+
+volumes:
+  redis-test-data:
+    driver: local

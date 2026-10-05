@@ -1,0 +1,119 @@
+version: "3.8"
+
+# Production Docker Compose configuration for LLM Optimization Gateway.
+# Includes hardened security settings, resource limits, and health checks.
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: llm-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    environment:
+      - GATEWAY_PORT=8080
+      - METRICS_PORT=9090
+      - GATEWAY_HOST=0.0.0.0
+      - REDIS_URL=redis://redis:6379
+      - CACHE_ENABLED=true
+      - CACHE_TTL=600s
+      - CACHE_KEY_PREFIX=llm-gw
+      - DEDUP_ENABLED=true
+      - DEDUP_WINDOW=5s
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - ROUTING_MAX_ATTEMPTS=3
+      - ROUTING_FALLBACK_ENABLED=true
+      - CIRCUIT_BREAKER_THRESHOLD=5
+      - CIRCUIT_BREAKER_TIMEOUT=30s
+      - RETRY_MAX_ATTEMPTS=3
+      - SHUTDOWN_TIMEOUT=30s
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/healthcheck.sh"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    # Security hardening
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - gateway-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: llm-gateway-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --loglevel warning
+      --protected-mode yes
+      --tcp-keepalive 60
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    volumes:
+      - redis-data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    networks:
+      - gateway-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  gateway-net:
+    driver: bridge
