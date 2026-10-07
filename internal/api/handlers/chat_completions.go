@@ -1,22 +1,77 @@
 package handlers
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/llm-optimization-gateway/internal/api/models"
+	"github.com/llm-optimization-gateway/internal/cache"
+	"github.com/llm-optimization-gateway/internal/cache/memory"
+	"github.com/llm-optimization-gateway/internal/provider"
+	http_provider "github.com/llm-optimization-gateway/internal/provider/http"
 )
 
 // ChatCompletionsHandler handles POST /v1/chat/completions requests.
-type ChatCompletionsHandler struct{}
+type ChatCompletionsHandler struct {
+	provider provider.Provider
+	cache    *memory.Cache
+}
 
-// NewChatCompletionsHandler creates a new ChatCompletionsHandler.
+// NewChatCompletionsHandler creates a new ChatCompletionsHandler with real provider.
 func NewChatCompletionsHandler() *ChatCompletionsHandler {
-	return &ChatCompletionsHandler{}
+	// Get provider config from environment
+	apiKey := os.Getenv("GATEWAY_PROVIDERS_0_API_KEY")
+	providerName := os.Getenv("GATEWAY_PROVIDERS_0_NAME")
+	baseURL := os.Getenv("GATEWAY_PROVIDERS_0_BASE_URL")
+
+	// Create HTTP provider if configured
+	var prov provider.Provider
+	var err error
+	
+	if apiKey != "" && providerName != "" {
+		config := &http_provider.Config{
+			Name:    providerName,
+			APIKey:  apiKey,
+			BaseURL: baseURL,
+			Timeout: 30 * time.Second,
+			Models:  []string{"gemini-1.5-flash", "gemini-1.5-pro", "gpt-4", "gpt-3.5-turbo"},
+		}
+		
+		// Set API format based on provider
+		if providerName == "google" || baseURL == "https://generativelanguage.googleapis.com" {
+			config.APIFormat = provider.APIFormatGemini
+		} else {
+			config.APIFormat = provider.APIFormatOpenAI
+		}
+		
+		prov, err = http_provider.New(config)
+		if err != nil {
+			log.Printf("Warning: Failed to create HTTP provider: %v, using mock", err)
+		} else {
+			log.Printf("Configured HTTP provider: %s (%s)", providerName, config.APIFormat)
+		}
+	}
+
+	// Create in-memory cache
+	memCache, err := memory.New(memory.Config{
+		MaxSize:         1000,
+		DefaultTTL:      1 * time.Hour,
+		CleanupInterval: 5 * time.Minute,
+	})
+	if err != nil {
+		log.Printf("Warning: Failed to create cache: %v", err)
+	}
+
+	return &ChatCompletionsHandler{
+		provider: prov,
+		cache:    memCache,
+	}
 }
 
 // ServeHTTP handles incoming HTTP requests for chat completions.
@@ -67,15 +122,66 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	log.Printf("[%s] Processing chat completion request: model=%s messages=%d",
 		requestID, req.Model, len(req.Messages))
 
-	// Generate mock response
-	response := h.generateMockResponse(&req)
+	var response *models.ChatCompletionResponse
+	var cacheStatus string = "MISS"
 
-	log.Printf("[%s] Completed chat completion request: tokens=%d",
-		requestID, response.Usage.TotalTokens)
+	// Build cache key
+	cacheKey := h.buildCacheKey(&req)
+
+	// Try cache first
+	if h.cache != nil {
+		entry, hit, err := h.cache.Get(r.Context(), cacheKey)
+		if err != nil {
+			log.Printf("[%s] Cache error: %v", requestID, err)
+		} else if hit && entry != nil {
+			// Cache hit
+			cacheStatus = "HIT"
+			// Convert cache entry to response
+			response = h.cacheEntryToResponse(entry, req.Model)
+			log.Printf("[%s] Cache HIT for key=%s", requestID, cacheKey[:12])
+		}
+	}
+
+	// If cache miss, call provider
+	if response == nil {
+		if h.provider != nil {
+			// Convert to provider request
+			provReq := h.convertToProviderRequest(&req)
+
+			// Call provider
+			resp, err := h.provider.Complete(r.Context(), provReq)
+			if err != nil {
+				code := "provider_error"
+				models.WriteErrorResponse(w, requestID, http.StatusBadGateway,
+					fmt.Sprintf("provider error: %v", err),
+					"api_error", nil, &code)
+				return
+			}
+
+			// Convert response
+			response = h.convertFromProviderResponse(resp, req.Model)
+
+			// Cache the response
+			if h.cache != nil {
+				entry := h.responseToCacheEntry(response)
+				if err := h.cache.Set(r.Context(), cacheKey, entry); err != nil {
+					log.Printf("[%s] Cache write error: %v", requestID, err)
+				}
+			}
+		} else {
+			// Use mock if no provider
+			response = h.generateMockResponse(&req)
+		}
+	}
+
+	log.Printf("[%s] Completed chat completion request: tokens=%d cache=%s",
+		requestID, response.Usage.TotalTokens, cacheStatus)
 
 	// Write response
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Request-ID", requestID)
+	w.Header().Set("X-Cache-Status", cacheStatus)
+	w.Header().Set("X-Cache-Key", cacheKey[:min(12, len(cacheKey))])
 	w.WriteHeader(http.StatusOK)
 
 	json.NewEncoder(w).Encode(response)
@@ -116,6 +222,136 @@ func (h *ChatCompletionsHandler) generateMockResponse(req *models.ChatCompletion
 			PromptTokens:     promptTokens,
 			CompletionTokens: completionTokens,
 			TotalTokens:      promptTokens + completionTokens,
+		},
+	}
+}
+
+// buildCacheKey creates a deterministic cache key from the request.
+func (h *ChatCompletionsHandler) buildCacheKey(req *models.ChatCompletionRequest) string {
+	// Build key from model + messages
+	key := req.Model + ":"
+	for _, msg := range req.Messages {
+		key += msg.Role + ":" + msg.Content + ":"
+	}
+	// Add temperature if set
+	if req.Temperature != nil {
+		key += fmt.Sprintf("temp:%.2f:", *req.Temperature)
+	}
+	// Hash it
+	hash := sha256.Sum256([]byte(key))
+	return fmt.Sprintf("%x", hash)[:32]
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// convertToProviderRequest converts API request to provider request.
+func (h *ChatCompletionsHandler) convertToProviderRequest(req *models.ChatCompletionRequest) *provider.CompletionRequest {
+	messages := make([]provider.Message, len(req.Messages))
+	for i, msg := range req.Messages {
+		messages[i] = provider.Message{
+			Role:    msg.Role,
+			Content: msg.Content,
+		}
+	}
+
+	provReq := &provider.CompletionRequest{
+		Model:    req.Model,
+		Messages: messages,
+	}
+
+	if req.Temperature != nil {
+		provReq.Temperature = req.Temperature
+	}
+	if req.MaxTokens != nil {
+		provReq.MaxTokens = req.MaxTokens
+	}
+
+	return provReq
+}
+
+// convertFromProviderResponse converts provider response to API response.
+func (h *ChatCompletionsHandler) convertFromProviderResponse(resp *provider.CompletionResponse, model string) *models.ChatCompletionResponse {
+	choices := make([]models.ChatCompletionChoice, len(resp.Choices))
+	for i, choice := range resp.Choices {
+		choices[i] = models.ChatCompletionChoice{
+			Index: choice.Index,
+			Message: models.ChatMessage{
+				Role:    choice.Message.Role,
+				Content: choice.Message.Content,
+			},
+			FinishReason: choice.FinishReason,
+		}
+	}
+
+	return &models.ChatCompletionResponse{
+		ID:      resp.ID,
+		Object:  "chat.completion",
+		Created: resp.Created.Unix(),
+		Model:   model,
+		Choices: choices,
+		Usage: models.Usage{
+			PromptTokens:     resp.Usage.PromptTokens,
+			CompletionTokens: resp.Usage.CompletionTokens,
+			TotalTokens:      resp.Usage.TotalTokens,
+		},
+	}
+}
+
+// responseToCacheEntry converts API response to cache entry.
+func (h *ChatCompletionsHandler) responseToCacheEntry(resp *models.ChatCompletionResponse) *cache.Entry {
+	// Extract content from first choice
+	content := ""
+	if len(resp.Choices) > 0 {
+		content = resp.Choices[0].Message.Content
+	}
+
+	return &cache.Entry{
+		Response: cache.CompletionResponse{
+			ID:           resp.ID,
+			Model:        resp.Model,
+			Content:      content,
+			FinishReason: resp.Choices[0].FinishReason,
+			Usage: cache.UsageInfo{
+				PromptTokens:     resp.Usage.PromptTokens,
+				CompletionTokens: resp.Usage.CompletionTokens,
+				TotalTokens:      resp.Usage.TotalTokens,
+			},
+		},
+		Metadata: cache.EntryMetadata{
+			CreatedAt: time.Now(),
+			TTL:       1 * time.Hour,
+			Tokens:    resp.Usage.TotalTokens,
+		},
+		Model: resp.Model,
+	}
+}
+
+// cacheEntryToResponse converts cache entry to API response.
+func (h *ChatCompletionsHandler) cacheEntryToResponse(entry *cache.Entry, model string) *models.ChatCompletionResponse {
+	return &models.ChatCompletionResponse{
+		ID:      entry.Response.ID,
+		Object:  "chat.completion",
+		Created: entry.Metadata.CreatedAt.Unix(),
+		Model:   model,
+		Choices: []models.ChatCompletionChoice{
+			{
+				Index: 0,
+				Message: models.ChatMessage{
+					Role:    "assistant",
+					Content: entry.Response.Content,
+				},
+				FinishReason: entry.Response.FinishReason,
+			},
+		},
+		Usage: models.Usage{
+			PromptTokens:     entry.Response.Usage.PromptTokens,
+			CompletionTokens: entry.Response.Usage.CompletionTokens,
+			TotalTokens:      entry.Response.Usage.TotalTokens,
 		},
 	}
 }
