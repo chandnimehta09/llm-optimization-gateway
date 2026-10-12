@@ -1,6 +1,14 @@
 # LLM Optimization Gateway
 
-A production-ready HTTP gateway for routing and optimizing LLM API requests with intelligent caching, deduplication, and cost reduction strategies.
+A Go-based LLM gateway that exposes an OpenAI-compatible REST API and supports Google Gemini, OpenAI, and vLLM as backend providers, with intelligent caching and cost optimization strategies.
+
+## Overview
+
+The gateway acts as a translation layer between your application and multiple LLM providers:
+
+- **Single API Format**: Applications use OpenAI SDK/format to communicate with the gateway
+- **Multiple Backend Support**: Gateway translates requests to Google Gemini, OpenAI, or vLLM APIs
+- **Optimization Layer**: Adds caching, routing, deduplication, and telemetry between client and provider
 
 ## Features
 
@@ -9,11 +17,11 @@ A production-ready HTTP gateway for routing and optimizing LLM API requests with
 1. **Exact Response Caching**
    - SHA256-based deterministic cache keys
    - In-memory cache with LRU eviction
-   - Configurable TTL (default: 1 hour)
+   - Configurable TTL via `GATEWAY_CACHE_DEFAULT_TTL` environment variable (default: 1 hour)
    - Cache headers (`X-Cache-Status`, `X-Cache-Key`) for observability
 
 2. **Provider Routing with Fallback Chains**
-   - Multi-provider support (OpenAI, Google Gemini)
+   - Multi-provider support (Google Gemini, OpenAI, vLLM)
    - Automatic failover on provider errors
    - Load balancing across providers
 
@@ -33,11 +41,11 @@ A production-ready HTTP gateway for routing and optimizing LLM API requests with
    - Automatic retries with exponential backoff
    - Graceful degradation
 
-### API Compatibility
+### API Design
 
-- **OpenAI-compatible API**: Drop-in replacement for OpenAI SDKs
-- **Gemini Support**: Native Google Gemini API integration
-- **Streaming Support**: Server-Sent Events for streaming responses
+- **OpenAI-Compatible Endpoint**: Clients use OpenAI SDK/format to send requests
+- **Backend Provider Translation**: Gateway translates OpenAI format to Gemini/OpenAI/vLLM APIs
+- **Transparent Provider Switching**: Change backends without modifying client code
 
 ## Quick Start
 
