@@ -58,10 +58,21 @@ func NewChatCompletionsHandler() *ChatCompletionsHandler {
 		}
 	}
 
+	// Get cache TTL from environment (default: 1 hour)
+	defaultTTL := 1 * time.Hour
+	if ttlStr := os.Getenv("GATEWAY_CACHE_DEFAULT_TTL"); ttlStr != "" {
+		if parsed, err := time.ParseDuration(ttlStr); err == nil {
+			defaultTTL = parsed
+			log.Printf("Cache TTL set to %v from environment", defaultTTL)
+		} else {
+			log.Printf("Warning: Invalid GATEWAY_CACHE_DEFAULT_TTL value '%s', using default 1h: %v", ttlStr, err)
+		}
+	}
+
 	// Create in-memory cache
 	memCache, err := memory.New(memory.Config{
 		MaxSize:         1000,
-		DefaultTTL:      1 * time.Hour,
+		DefaultTTL:      defaultTTL,
 		CleanupInterval: 5 * time.Minute,
 	})
 	if err != nil {
